@@ -1,0 +1,2 @@
+{% extends "base.html" %}{% block title %}{{ e.code }}{% endblock %}{% block body %}
+<div class="panel"><h1>{{ e.code }}</h1><p class="muted">{{ "You don't have access to this page." if e.code==403 else "We couldn't find that page." }}</p><a class="btn" href="{{ url_for('dashboard') }}">Back to dashboard</a></div>{% endblock %}

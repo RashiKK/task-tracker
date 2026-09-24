@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}People{% endblock %}{% block body %}
+<div class="head"><div><h1>People</h1><p class="muted">Add people, edit details, reset passwords, or deactivate accounts.</p></div><a class="btn" href="{{ url_for('staff_form') }}">Add person</a></div>
+<div class="panel tw"><table><tr><th>Name</th><th>Username</th><th>Role</th><th>Department</th><th>Status</th><th></th></tr>
+{% for p in people %}<tr><td><b>{{ p.name }}</b></td><td>{{ p.username }}</td><td>{{ p.role|capitalize }}</td><td>{{ p.department or '-' }}</td>
+<td><span class="badge {{ 's-Completed' if p.active else 'p-Low' }}">{{ 'Active' if p.active else 'Deactivated' }}</span></td>
+<td><a href="{{ url_for('staff_form', uid=p.id) }}">Edit</a>{% if p.id != g.user.id %} · <form class="inline" method="post" action="{{ url_for('staff_toggle', uid=p.id) }}" {% if p.active %}onsubmit="return confirm('Deactivate {{ p.name }}? They will no longer be able to sign in.')"{% endif %}><button class="link">{{ 'Deactivate' if p.active else 'Reactivate' }}</button></form>{% endif %}</td></tr>{% endfor %}</table></div>{% endblock %}

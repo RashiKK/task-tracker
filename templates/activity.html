@@ -1,0 +1,2 @@
+{% extends "base.html" %}{% block title %}Activity{% endblock %}{% block body %}<h1>Recent activity</h1>
+<div class="panel">{% for a in rows %}<div class="item"><b>{{ a.action }}</b> {{ a.details }}{% if a.task_id %} · <a href="{{ url_for('task_detail', tid=a.task_id) }}">{{ a.title }}</a>{% endif %}<br><small>{{ a.name }} · {{ a.created_at }}</small></div>{% endfor %}</div>{% endblock %}

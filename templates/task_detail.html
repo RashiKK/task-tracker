@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}{{ t.title }}{% endblock %}{% block body %}
+<div class="head"><div><h1>{{ t.title }}</h1><p class="muted">Assigned to {{ t.assignee }} · Due {{ t.deadline }}{% if t.overdue %} · <span class="blocker">Overdue</span>{% endif %}</p></div>
+{% if g.user.role=='manager' %}<a class="btn ghost" href="{{ url_for('task_form', tid=t.id) }}">Edit task</a>{% endif %}</div>
+<div class="grid2"><div>
+<div class="panel"><p>{{ t.description or 'No description.' }}</p><span class="badge p-{{ t.priority }}">{{ t.priority }}</span> <span class="badge s-{{ t.status|replace(' ','') }}">{{ t.status }}</span>
+<div class="bar big"><span style="width:{{ t.progress }}%"></span></div><small>{{ t.progress }}% complete{% if t.completed_at %} · finished {{ t.completed_at }}{% endif %}</small></div>
+<form class="panel form" method="post" action="{{ url_for('task_update', tid=t.id) }}"><h2>Update task</h2>
+<label>Status<select name="status">{% for s in statuses %}<option {{ 'selected' if t.status==s }}>{{ s }}</option>{% endfor %}</select></label>
+<label>Progress (%)<input type="number" name="progress" min="0" max="100" value="{{ t.progress }}"></label>
+<label>Comment<textarea name="comment" rows="3" placeholder="Share progress or ask a question"></textarea></label><button>Save update</button></form>
+<div class="panel"><h2>Comments</h2>{% for c in comments %}<div class="item"><b>{{ c.name }}</b> <small>{{ c.created_at }}</small><br>{{ c.body }}</div>{% else %}<p class="muted">No comments yet.</p>{% endfor %}</div></div>
+<div class="panel"><h2>History</h2>{% for h in history %}<div class="item"><b>{{ h.action }}</b> {{ h.details }}<br><small>{{ h.name }} · {{ h.created_at }}</small></div>{% endfor %}</div></div>{% endblock %}

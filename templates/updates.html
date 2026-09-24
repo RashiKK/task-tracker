@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}Daily updates{% endblock %}{% block body %}<h1>Daily updates</h1>
+{% if mgr %}<form class="panel filters" method="get"><label>Date<input type="date" name="date" value="{{ d }}"></label>
+<label>Employee<select name="employee"><option value="">All</option>{% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if emp==e.id|string }}>{{ e.name }}</option>{% endfor %}</select></label>
+<button>Show updates</button><small class="muted">Clear the date to see every day.</small></form>
+{% if missing %}<div class="flash warn">No update from: {{ missing|map(attribute='name')|join(', ') }}</div>{% endif %}
+{% else %}<form class="panel form" method="post"><h2>Today's update ({{ today }})</h2>
+<label>What did you work on today?<textarea name="worked_on" rows="2" required>{{ cur.worked_on if cur }}</textarea></label>
+<label>What did you complete?<textarea name="completed" rows="2">{{ cur.completed if cur }}</textarea></label>
+<label>What are you working on now?<textarea name="in_progress" rows="2">{{ cur.in_progress if cur }}</textarea></label>
+<label>Problems or blockers<textarea name="blockers" rows="2">{{ cur.blockers if cur }}</textarea></label><button>{{ 'Update' if cur else 'Submit' }} today's update</button></form>
+<h2>Your previous updates</h2>{% endif %}
+{% for r in rows %}<div class="panel"><b>{{ r.name if mgr else '' }}</b> <small>{{ r.update_date }}</small>
+<p><b>Worked on:</b> {{ r.worked_on }}</p><p><b>Completed:</b> {{ r.completed or '-' }}</p><p><b>In progress:</b> {{ r.in_progress or '-' }}</p>
+{% if r.blockers %}<p class="blocker"><b>Blockers:</b> {{ r.blockers }}</p>{% endif %}</div>
+{% else %}<p class="muted">No updates found.</p>{% endfor %}{% endblock %}

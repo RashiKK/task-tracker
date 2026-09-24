@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block title %}Team{% endblock %}{% block body %}<h1>Team overview</h1>
+<div class="panel tw"><table><tr><th>Employee</th><th>Tasks</th><th>Pending</th><th>In progress</th><th>Completed</th><th>Overdue</th><th>Next deadline</th><th>Overall progress</th></tr>
+{% for r in rows %}<tr><td><a href="{{ url_for('dashboard', employee=r.id) }}"><b>{{ r.name }}</b></a><br><small>{{ r.department }}</small></td><td>{{ r.total }}</td><td>{{ r.pending }}</td><td>{{ r.active }}</td><td>{{ r.done }}</td>
+<td class="{{ 'blocker' if r.overdue }}">{{ r.overdue }}</td><td>{{ r.next_deadline or '-' }}</td><td><div class="bar"><span style="width:{{ r.progress|int }}%"></span></div><small>{{ r.progress|int }}%</small></td></tr>{% endfor %}</table></div>{% endblock %}

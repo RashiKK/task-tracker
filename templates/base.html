@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}{% endblock %} - TaskFlow</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head><body>
+{% if g.user %}<aside class="side"><div class="brand">TaskFlow</div><nav>
+<a href="{{ url_for('dashboard') }}" class="{{ 'on' if request.endpoint in ('dashboard','task_detail','task_form') }}">{{ 'Dashboard' if g.user.role=='manager' else 'My tasks' }}</a>
+<a href="{{ url_for('updates') }}" class="{{ 'on' if request.endpoint=='updates' }}">Daily updates</a>
+{% if g.user.role=='manager' %}<a href="{{ url_for('team') }}" class="{{ 'on' if request.endpoint=='team' }}">Team</a>
+<a href="{{ url_for('staff') }}" class="{{ 'on' if request.endpoint in ('staff','staff_form') }}">People</a>
+<a href="{{ url_for('activity') }}" class="{{ 'on' if request.endpoint=='activity' }}">Activity</a>{% endif %}</nav>
+<div class="me"><b>{{ g.user.name }}</b><small>{{ g.user.role|capitalize }} · {{ g.user.department }}</small><a href="{{ url_for('logout') }}">Sign out</a></div></aside>{% endif %}
+<main class="{{ 'main' if g.user }}">{% for c, m in get_flashed_messages(with_categories=true) %}<div class="flash {{ c }}">{{ m }}</div>{% endfor %}
+{% block body %}{% endblock %}</main></body></html>

@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block title %}{{ 'Edit' if task else 'New' }} task{% endblock %}{% block body %}
+{% set f = form or task or {} %}<h1>{{ 'Edit task' if task else 'New task' }}</h1>
+<form class="panel form" method="post"><label>Title<input name="title" value="{{ f.title }}" required></label>
+<label>Description<textarea name="description" rows="4">{{ f.description }}</textarea></label>
+<label>Assign to<select name="assignee_id" required><option value="">Select employee</option>{% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if f.assignee_id|string==e.id|string }}>{{ e.name }}</option>{% endfor %}</select></label>
+<label>Priority<select name="priority">{% for p in priorities %}<option {{ 'selected' if (f.priority or 'Medium')==p }}>{{ p }}</option>{% endfor %}</select></label>
+<label>Deadline<input type="date" name="deadline" value="{{ f.deadline }}" required></label>
+<div class="row"><button>Save task</button><a class="btn ghost" href="{{ url_for('dashboard') }}">Cancel</a></div></form>
+{% if task %}<form method="post" action="{{ url_for('task_delete', tid=task.id) }}" onsubmit="return confirm('Delete this task and its history?')"><button class="danger">Delete task</button></form>{% endif %}{% endblock %}

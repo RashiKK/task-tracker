@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block title %}Dashboard{% endblock %}{% block body %}
+<div class="head"><div><h1>{{ 'Team dashboard' if mgr else 'My tasks' }}</h1><p class="muted">{{ today }}</p></div>
+{% if mgr %}<a class="btn" href="{{ url_for('task_form') }}">New task</a>{% endif %}</div>
+<section class="cards">
+<div class="card"><span>Total tasks</span><b>{{ stats.total }}</b></div>
+<div class="card"><span>{{ 'Pending' if not mgr else 'In progress' }}</span><b>{{ stats.pending if not mgr else stats.progress }}</b></div>
+{% if not mgr %}<div class="card"><span>In progress</span><b>{{ stats.progress }}</b></div>{% endif %}
+<div class="card ok"><span>Completed</span><b>{{ stats.done }}</b></div><div class="card bad"><span>Overdue</span><b>{{ stats.overdue }}</b></div>
+{% if mgr %}<div class="card"><span>Employees</span><b>{{ stats.employees }}</b></div>{% endif %}</section>
+{% if not mgr and not submitted %}<div class="flash warn">You haven't submitted today's update. <a href="{{ url_for('updates') }}">Submit it now</a></div>{% endif %}
+<form class="panel filters" method="get">
+{% if mgr %}<label>Employee<select name="employee"><option value="">All</option>{% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if f.employee==e.id|string }}>{{ e.name }}</option>{% endfor %}</select></label>{% endif %}
+<label>Status<select name="status"><option value="">All</option>{% for s in statuses %}<option {{ 'selected' if f.status==s }}>{{ s }}</option>{% endfor %}</select></label>
+<label>Priority<select name="priority"><option value="">All</option>{% for p in priorities %}<option {{ 'selected' if f.priority==p }}>{{ p }}</option>{% endfor %}</select></label>
+<label>Due from<input type="date" name="date_from" value="{{ f.date_from }}"></label><label>Due to<input type="date" name="date_to" value="{{ f.date_to }}"></label>
+<button>Apply filters</button><a class="btn ghost" href="{{ url_for('dashboard') }}">Reset</a></form>
+<div class="panel tw"><table><tr><th>Task</th>{% if mgr %}<th>Assignee</th>{% endif %}<th>Priority</th><th>Status</th><th>Progress</th><th>Deadline</th></tr>
+{% for t in tasks %}<tr><td><a href="{{ url_for('task_detail', tid=t.id) }}"><b>{{ t.title }}</b></a></td>{% if mgr %}<td>{{ t.assignee }}</td>{% endif %}
+<td><span class="badge p-{{ t.priority }}">{{ t.priority }}</span></td><td><span class="badge s-{{ t.status|replace(' ','') }}">{{ t.status }}</span></td>
+<td><div class="bar"><span style="width:{{ t.progress }}%"></span></div><small>{{ t.progress }}%</small></td>
+<td>{{ t.deadline }} {% if t.overdue %}<span class="badge p-Critical">Overdue</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">No tasks match these filters.</td></tr>{% endfor %}</table></div>
+{% if mgr %}<div class="panel"><h2>Today's updates ({{ updates|length }} of {{ stats.employees }} submitted)</h2>
+{% for u in updates %}<div class="item"><b>{{ u.name }}</b> - {{ u.worked_on }}{% if u.blockers %}<div class="blocker">Blocker: {{ u.blockers }}</div>{% endif %}</div>{% endfor %}
+{% if missing %}<p class="muted">Not yet submitted: {{ missing|map(attribute='name')|join(', ') }}</p>{% endif %}
+<a href="{{ url_for('updates') }}">View all updates</a></div>{% endif %}{% endblock %}
