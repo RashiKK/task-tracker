@@ -14,6 +14,15 @@ app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 app.teardown_appcontext(db.close_db)
 db.init_db()
 
+# If ADMIN_EMAIL is set and the admin account still has no email (e.g. an account created
+# before email login was added), fill it in on startup. This is what lets a locked-out
+# admin recover: set ADMIN_EMAIL on Render (or locally) and restart, no database access needed.
+_admin_email = os.environ.get("ADMIN_EMAIL")
+if _admin_email:
+    with app.app_context():
+        db.execute("UPDATE users SET email=? WHERE username=? AND (email IS NULL OR email='')",
+                  (_admin_email.strip().lower(), os.environ.get("ADMIN_USERNAME", "admin").strip().lower()))
+
 SMTP_HOST = os.environ.get("SMTP_HOST")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER")
