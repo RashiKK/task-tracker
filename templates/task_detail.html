@@ -8,5 +8,14 @@
 <label>Status<select name="status">{% for s in statuses %}<option {{ 'selected' if t.status==s }}>{{ s }}</option>{% endfor %}</select></label>
 <label>Progress (%)<input type="number" name="progress" min="0" max="100" value="{{ t.progress }}"></label>
 <label>Comment<textarea name="comment" rows="3" placeholder="Share progress or ask a question"></textarea></label><button>Save update</button></form>
+<div class="panel"><h2>Files</h2>
+{% for f in files %}<div class="item row between"><div><b>{{ f.filename }}</b> <span class="badge {{ 's-Completed' if f.stage == 'Completed work' else 's-InProgress' }}">{{ f.stage }}</span><br><small>{{ f.uploader }} · {{ f.created_at }} · {{ f.size|filesize }}</small></div>
+<div class="row"><a class="btn ghost sm" href="{{ url_for('file_view', fid=f.id) }}">{{ 'Preview' if kind(f.filename) else 'Details' }}</a><a class="btn ghost sm" href="{{ url_for('file_download', fid=f.id) }}">Download</a>
+{% if g.user.role == 'manager' or f.user_id == g.user.id %}<form method="post" action="{{ url_for('file_delete', fid=f.id) }}" onsubmit="return confirm('Delete this file?')"><button class="link">Delete</button></form>{% endif %}</div></div>
+{% else %}<p class="muted">No files uploaded yet.</p>{% endfor %}
+<form class="form" method="post" enctype="multipart/form-data" action="{{ url_for('file_upload', tid=t.id) }}" style="margin-top:14px">
+<label>Add files (max 10 MB each)<input type="file" name="files" multiple required></label>
+<label>Stage<select name="stage"><option>Work in progress</option><option>Completed work</option></select></label><button>Upload</button>
+<small class="muted">Allowed: PDF, images, text/CSV, Word, Excel, PowerPoint, OpenDocument, ZIP.</small></form></div>
 <div class="panel"><h2>Comments</h2>{% for c in comments %}<div class="item"><b>{{ c.name }}</b> <small>{{ c.created_at }}</small><br>{{ c.body }}</div>{% else %}<p class="muted">No comments yet.</p>{% endfor %}</div></div>
 <div class="panel"><h2>History</h2>{% for h in history %}<div class="item"><b>{{ h.action }}</b> {{ h.details }}<br><small>{{ h.name }} · {{ h.created_at }}</small></div>{% endfor %}</div></div>{% endblock %}

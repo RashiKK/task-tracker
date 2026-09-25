@@ -1,4 +1,4 @@
 {% extends "base.html" %}{% block title %}Sign in{% endblock %}{% block body %}
 <div class="login"><form class="panel form" method="post"><h1>Sign in to TaskFlow</h1>
-<label>Username<input name="username" required autofocus></label><label>Password<input name="password" type="password" required></label>
+<label>Email or username<input name="username" required autofocus autocomplete="username"></label><label>Password<input name="password" type="password" required></label>
 <button>Sign in</button></form></div>{% endblock %}

@@ -1,2 +1,2 @@
 {% extends "base.html" %}{% block title %}{{ e.code }}{% endblock %}{% block body %}
-<div class="panel"><h1>{{ e.code }}</h1><p class="muted">{{ "You don't have access to this page." if e.code==403 else "We couldn't find that page." }}</p><a class="btn" href="{{ url_for('dashboard') }}">Back to dashboard</a></div>{% endblock %}
+<div class="panel"><h1>{{ e.code }}</h1><p class="muted">{{ {403: "You don't have access to this page.", 413: "That upload is too large (max 10 MB per file, 25 MB per upload)."}.get(e.code, "We couldn't find that page.") }}</p><a class="btn" href="{{ url_for('dashboard') }}">Back to dashboard</a></div>{% endblock %}

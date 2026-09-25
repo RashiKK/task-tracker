@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block title %}{{ f.filename }}{% endblock %}{% block body %}
+<div class="head"><div><h1>{{ f.filename }}</h1><p class="muted">Task: <a href="{{ url_for('task_detail', tid=t.id) }}">{{ t.title }}</a> · {{ f.uploader }} · {{ f.created_at }} · {{ f.size|filesize }} · {{ f.stage }}</p></div>
+<div class="row"><a class="btn ghost" href="{{ url_for('task_detail', tid=t.id) }}">Back to task</a><a class="btn" href="{{ url_for('file_download', fid=f.id) }}">Download</a></div></div>
+<div class="panel">{% if kind == 'image' %}<img class="pv" src="{{ url_for('file_raw', fid=f.id) }}" alt="{{ f.filename }}">
+{% elif kind == 'pdf' %}<iframe class="preview" src="{{ url_for('file_raw', fid=f.id) }}" title="{{ f.filename }}"></iframe>
+{% elif kind == 'text' %}<pre class="txt">{{ text }}</pre>
+{% else %}<p class="muted">This file type can't be previewed in the browser. Use Download to open it.</p>{% endif %}</div>{% endblock %}

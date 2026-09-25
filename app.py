@@ -1,13 +1,14 @@
 """Employee Task Tracker - run with: python app.py"""
-import os
+import io, mimetypes, os
 from datetime import date, datetime
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, g
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, g, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
 import models as db
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-production")
+app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 app.teardown_appcontext(db.close_db)
 db.init_db()
 
@@ -18,7 +19,7 @@ def overdue():
     return f"t.status!='Completed' AND t.deadline<'{date.today().isoformat()}'"
 
 def task_sql():
-    return f"SELECT t.*, u.name AS assignee, CASE WHEN {overdue()} THEN 1 ELSE 0 END AS overdue FROM tasks t JOIN users u ON u.id=t.assignee_id"
+    return f"SELECT t.*, u.name AS assignee, CASE WHEN {overdue()} THEN 1 ELSE 0 END AS overdue, (SELECT COUNT(*) FROM files fl WHERE fl.task_id=t.id) AS file_count FROM tasks t JOIN users u ON u.id=t.assignee_id"
 
 @app.before_request
 def load_user():
@@ -40,6 +41,7 @@ def manager_required(f):
     return w
 
 @app.errorhandler(403)
+@app.errorhandler(413)
 @app.errorhandler(404)
 def error(e):
     return render_template("error.html", e=e), e.code
@@ -56,7 +58,8 @@ def get_task(tid):
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        u = db.query("SELECT * FROM users WHERE username=?", (request.form.get("username", "").strip().lower(),), one=True)
+        ident = request.form.get("username", "").strip().lower()
+        u = db.query("SELECT * FROM users WHERE username=? OR email=?", (ident, ident), one=True)
         if u and u["active"] and check_password_hash(u["password_hash"], request.form.get("password", "")):
             session.clear(); session["uid"] = u["id"]
             return redirect(url_for("dashboard"))
@@ -127,7 +130,8 @@ def task_detail(tid):
     t = get_task(tid)
     comments = db.query("SELECT c.*, u.name FROM comments c JOIN users u ON u.id=c.user_id WHERE task_id=? ORDER BY c.id DESC", (tid,))
     history = db.query("SELECT a.*, u.name FROM activity a LEFT JOIN users u ON u.id=a.user_id WHERE task_id=? ORDER BY a.id DESC", (tid,))
-    return render_template("task_detail.html", t=t, comments=comments, history=history, statuses=STATUSES)
+    files = db.query("SELECT f.id, f.user_id, f.filename, f.size, f.stage, f.created_at, u.name AS uploader FROM files f JOIN users u ON u.id=f.user_id WHERE f.task_id=? ORDER BY f.id DESC", (tid,))
+    return render_template("task_detail.html", t=t, comments=comments, history=history, statuses=STATUSES, files=files)
 
 @app.post("/tasks/<int:tid>/update")
 @login_required
@@ -215,21 +219,23 @@ def staff_form(uid=None):
     if uid and not person: abort(404)
     form = None
     if request.method == "POST":
-        v = {k: request.form.get(k, "").strip() for k in ("name", "username", "department", "role", "password")}
-        v["username"] = v["username"].lower()
+        v = {k: request.form.get(k, "").strip() for k in ("name", "email", "username", "department", "role", "password")}
+        v["username"], v["email"] = v["username"].lower(), v["email"].lower()
+        if not v["username"] and "@" in v["email"]: v["username"] = v["email"].split("@")[0]
         if v["role"] not in ("manager", "employee") or (person and person["id"] == g.user["id"]): v["role"] = person["role"] if person else "employee"
-        dup = db.query("SELECT id FROM users WHERE username=? AND id!=?", (v["username"], uid or 0), one=True)
-        if not v["name"] or not v["username"] or (not person and not v["password"]) or (v["password"] and len(v["password"]) < 6):
-            flash("Name, username and a password of at least 6 characters are required.", "error"); form = v
+        dup = db.query("SELECT id FROM users WHERE (username=? OR email=?) AND id!=?", (v["username"], v["email"] or None, uid or 0), one=True)
+        bad_email = ("@" not in v["email"]) if (v["email"] or not person) else False
+        if not v["name"] or not v["username"] or bad_email or (not person and not v["password"]) or (v["password"] and len(v["password"]) < 6):
+            flash("Name, a valid email and a password of at least 6 characters are required.", "error"); form = v
         elif dup:
-            flash("That username is already taken.", "error"); form = v
+            flash("That email or username is already in use.", "error"); form = v
         elif person:
-            db.execute("UPDATE users SET name=?,username=?,department=?,role=? WHERE id=?", (v["name"], v["username"], v["department"], v["role"], uid))
+            db.execute("UPDATE users SET name=?,email=?,username=?,department=?,role=? WHERE id=?", (v["name"], v["email"] or None, v["username"], v["department"], v["role"], uid))
             if v["password"]: db.execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(v["password"]), uid))
             flash("Person saved."); return redirect(url_for("staff"))
         else:
-            db.execute("INSERT INTO users(name,username,password_hash,role,department) VALUES(?,?,?,?,?)",
-                       (v["name"], v["username"], generate_password_hash(v["password"]), v["role"], v["department"]))
+            db.execute("INSERT INTO users(name,username,email,password_hash,role,department) VALUES(?,?,?,?,?,?)",
+                       (v["name"], v["username"], v["email"], generate_password_hash(v["password"]), v["role"], v["department"]))
             flash(f"{v['name']} was added and can sign in now."); return redirect(url_for("staff"))
     return render_template("employee_form.html", person=person, form=form)
 
@@ -239,6 +245,78 @@ def staff_toggle(uid):
     if uid == g.user["id"]: abort(403)
     db.execute("UPDATE users SET active = 1 - active WHERE id=?", (uid,))
     flash("Account updated. Their tasks and history are kept."); return redirect(url_for("staff"))
+
+# ---------- file uploads (stored in the database so they survive Render redeploys) ----------
+ALLOWED = {"pdf", "png", "jpg", "jpeg", "gif", "webp", "txt", "csv", "md", "json", "log", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "zip"}
+IMAGES, TEXTS, MAX_FILE = {"png", "jpg", "jpeg", "gif", "webp"}, {"txt", "csv", "md", "json", "log"}, 10 * 1024 * 1024
+STAGES = ["Work in progress", "Completed work"]
+
+def ext(name): return name.rsplit(".", 1)[-1].lower() if "." in name else ""
+def kind(name):
+    e = ext(name)
+    return "image" if e in IMAGES else "pdf" if e == "pdf" else "text" if e in TEXTS else None
+app.jinja_env.globals["kind"] = kind
+
+@app.template_filter("filesize")
+def filesize(n): return f"{n / 1048576:.1f} MB" if n >= 1048576 else f"{max(1, round(n / 1024))} KB"
+
+def get_file(fid):
+    f = db.query("SELECT f.id, f.task_id, f.user_id, f.filename, f.size, f.stage, f.created_at, u.name AS uploader FROM files f JOIN users u ON u.id=f.user_id WHERE f.id=?", (fid,), one=True)
+    if not f: abort(404)
+    return f, get_task(f["task_id"])  # get_task enforces who may see it
+
+@app.post("/tasks/<int:tid>/upload")
+@login_required
+def file_upload(tid):
+    get_task(tid)
+    stage = request.form.get("stage") if request.form.get("stage") in STAGES else STAGES[0]
+    saved = 0
+    for up in request.files.getlist("files"):
+        name = os.path.basename((up.filename or "").replace(chr(92), "/")).strip()[:150]
+        if not name: continue
+        data = up.read()
+        if ext(name) not in ALLOWED: flash(f"'{name}' was skipped: that file type isn't allowed.", "error")
+        elif len(data) > MAX_FILE: flash(f"'{name}' was skipped: it is larger than 10 MB.", "error")
+        elif data:
+            db.execute("INSERT INTO files(task_id,user_id,filename,size,stage,data) VALUES(?,?,?,?,?,?)", (tid, g.user["id"], name, len(data), stage, db.blob(data)))
+            db.log(tid, g.user["id"], "File uploaded", f"{name} ({stage})"); saved += 1
+    if saved: flash(f"{saved} file(s) uploaded.")
+    return redirect(url_for("task_detail", tid=tid))
+
+@app.route("/files/<int:fid>")
+@login_required
+def file_view(fid):
+    f, t = get_file(fid)
+    k, text = kind(f["filename"]), None
+    if k == "text":
+        row = db.query("SELECT data FROM files WHERE id=?", (fid,), one=True)
+        text = bytes(row["data"])[:100000].decode("utf-8", "replace")
+    return render_template("file_view.html", f=f, t=t, kind=k, text=text)
+
+def send(fid, attach):
+    f, _ = get_file(fid)
+    row = db.query("SELECT data FROM files WHERE id=?", (fid,), one=True)
+    k = kind(f["filename"])
+    mime = "text/plain; charset=utf-8" if k == "text" else mimetypes.guess_type(f["filename"])[0] or "application/octet-stream"
+    r = send_file(io.BytesIO(bytes(row["data"])), mimetype=mime, as_attachment=attach or not k, download_name=f["filename"])
+    r.headers["X-Content-Type-Options"] = "nosniff"
+    return r
+
+@app.route("/files/<int:fid>/raw")
+@login_required
+def file_raw(fid): return send(fid, False)
+
+@app.route("/files/<int:fid>/download")
+@login_required
+def file_download(fid): return send(fid, True)
+
+@app.post("/files/<int:fid>/delete")
+@login_required
+def file_delete(fid):
+    f, t = get_file(fid)
+    if g.user["role"] != "manager" and f["user_id"] != g.user["id"]: abort(403)
+    db.execute("DELETE FROM files WHERE id=?", (fid,)); db.log(t["id"], g.user["id"], "File deleted", f["filename"])
+    flash("File deleted."); return redirect(url_for("task_detail", tid=t["id"]))
 
 if __name__ == "__main__":
     app.run(debug=os.environ.get("FLASK_DEBUG") == "1", port=int(os.environ.get("PORT", 5000)))

@@ -15,7 +15,7 @@
 <label>Due from<input type="date" name="date_from" value="{{ f.date_from }}"></label><label>Due to<input type="date" name="date_to" value="{{ f.date_to }}"></label>
 <button>Apply filters</button><a class="btn ghost" href="{{ url_for('dashboard') }}">Reset</a></form>
 <div class="panel tw"><table><tr><th>Task</th>{% if mgr %}<th>Assignee</th>{% endif %}<th>Priority</th><th>Status</th><th>Progress</th><th>Deadline</th></tr>
-{% for t in tasks %}<tr><td><a href="{{ url_for('task_detail', tid=t.id) }}"><b>{{ t.title }}</b></a></td>{% if mgr %}<td>{{ t.assignee }}</td>{% endif %}
+{% for t in tasks %}<tr><td><a href="{{ url_for('task_detail', tid=t.id) }}"><b>{{ t.title }}</b></a>{% if t.file_count %} <small class="muted">· {{ t.file_count }} file{{ 's' if t.file_count > 1 }}</small>{% endif %}</td>{% if mgr %}<td>{{ t.assignee }}</td>{% endif %}
 <td><span class="badge p-{{ t.priority }}">{{ t.priority }}</span></td><td><span class="badge s-{{ t.status|replace(' ','') }}">{{ t.status }}</span></td>
 <td><div class="bar"><span style="width:{{ t.progress }}%"></span></div><small>{{ t.progress }}%</small></td>
 <td>{{ t.deadline }} {% if t.overdue %}<span class="badge p-Critical">Overdue</span>{% endif %}</td></tr>
