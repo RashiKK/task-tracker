@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block title %}Verify{% endblock %}{% block body %}
+<div class="login"><div class="panel form" style="width:min(380px,92vw)"><h1>Check your email</h1>
+<p class="muted">We sent a 6-digit code to <b>{{ email }}</b>. It expires in 10 minutes.</p>
+<form method="post"><label>Code<input name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autofocus required autocomplete="one-time-code"></label>
+<button>Verify and sign in</button></form>
+<form method="post" style="margin-top:8px"><input type="hidden" name="resend" value="1"><button class="btn ghost" style="width:100%">Resend code</button></form>
+<p class="muted"><a href="{{ url_for('login') }}">Back to sign in</a></p></div></div>{% endblock %}

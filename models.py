@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS daily_updates(id {PK}, user_id INTEGER NOT NULL REFER
   created_at TEXT DEFAULT {NOW}, UNIQUE(user_id, update_date));
 CREATE TABLE IF NOT EXISTS activity(id {PK}, task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
   user_id INTEGER REFERENCES users(id), action TEXT NOT NULL, details TEXT, created_at TEXT DEFAULT {NOW});
+CREATE TABLE IF NOT EXISTS login_codes(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  code TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, sent_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS files(id {PK}, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id), filename TEXT NOT NULL, size INTEGER NOT NULL, stage TEXT,
   data {BLOB} NOT NULL, created_at TEXT DEFAULT {NOW});
@@ -56,10 +58,11 @@ def query(sql, args=(), one=False):
     cur = get_db().cursor(); cur.execute(_sql(sql), args); rows = cur.fetchall(); cur.close()
     return (rows[0] if rows else None) if one else rows
 
-def execute(sql, args=()):
-    d = get_db(); cur = d.cursor(); ins = PG and sql.lstrip().upper().startswith("INSERT")
+def execute(sql, args=(), returning=True):
+    """returning=False for inserts into tables with no auto id column (e.g. login_codes)."""
+    d = get_db(); cur = d.cursor(); ins = returning and PG and sql.lstrip().upper().startswith("INSERT")
     cur.execute(_sql(sql) + (" RETURNING id" if ins else ""), args)
-    new = (cur.fetchone() or {}).get("id") if ins else cur.lastrowid
+    new = (cur.fetchone() or {}).get("id") if ins else (cur.lastrowid if returning else None)
     cur.close(); d.commit(); return new
 
 def log(task_id, user_id, action, details=""):

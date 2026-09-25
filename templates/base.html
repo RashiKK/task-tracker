@@ -6,6 +6,6 @@
 {% if g.user.role=='manager' %}<a href="{{ url_for('team') }}" class="{{ 'on' if request.endpoint=='team' }}">Team</a>
 <a href="{{ url_for('staff') }}" class="{{ 'on' if request.endpoint in ('staff','staff_form') }}">People</a>
 <a href="{{ url_for('activity') }}" class="{{ 'on' if request.endpoint=='activity' }}">Activity</a>{% endif %}</nav>
-<div class="me"><b>{{ g.user.name }}</b><small>{{ g.user.role|capitalize }} · {{ g.user.department }}</small><a href="{{ url_for('logout') }}">Sign out</a></div></aside>{% endif %}
+<div class="me"><a href="{{ url_for('profile') }}"><b>{{ g.user.name }}</b></a><small>{{ g.user.role|capitalize }} · {{ g.user.department }}</small><a href="{{ url_for('logout') }}">Sign out</a></div></aside>{% endif %}
 <main class="{{ 'main' if g.user }}">{% for c, m in get_flashed_messages(with_categories=true) %}<div class="flash {{ c }}">{{ m }}</div>{% endfor %}
 {% block body %}{% endblock %}</main></body></html>

@@ -1,6 +1,8 @@
 """Employee Task Tracker - run with: python app.py"""
 import io, mimetypes, os
-from datetime import date, datetime
+import secrets, smtplib, ssl
+from datetime import date, datetime, timedelta
+from email.mime.text import MIMEText
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, g, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -11,6 +13,40 @@ app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-production")
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 app.teardown_appcontext(db.close_db)
 db.init_db()
+
+SMTP_HOST = os.environ.get("SMTP_HOST")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
+SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "no-reply@taskflow.local")
+EMAIL_CONFIGURED = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
+CODE_TTL_MIN, RESEND_COOLDOWN_SEC, MAX_ATTEMPTS = 10, 30, 5
+
+def send_code_email(to_email, name, code):
+    """Emails a sign-in code. Returns True if it was sent. If SMTP isn't configured
+    (e.g. running locally without setting the SMTP_* variables), returns False so the
+    caller can fall back to showing the code on screen instead of emailing it."""
+    if not EMAIL_CONFIGURED: return False
+    msg = MIMEText(f"Hi {name},\n\nYour TaskFlow sign-in code is: {code}\n\nIt expires in {CODE_TTL_MIN} minutes. "
+                    "If you didn't try to sign in, you can ignore this email.")
+    msg["Subject"], msg["From"], msg["To"] = "Your TaskFlow sign-in code", SMTP_FROM, to_email
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as s:
+            s.starttls(context=ssl.create_default_context())
+            s.login(SMTP_USER, SMTP_PASSWORD)
+            s.sendmail(SMTP_FROM, [to_email], msg.as_string())
+        return True
+    except Exception as e:
+        app.logger.error(f"Email send failed: {e}")
+        return False
+
+def issue_code(uid):
+    code = f"{secrets.randbelow(1000000):06d}"
+    now = datetime.now()
+    db.execute("DELETE FROM login_codes WHERE user_id=?", (uid,))
+    db.execute("INSERT INTO login_codes(user_id,code,expires_at,attempts,sent_at) VALUES(?,?,?,0,?)",
+              (uid, code, (now + timedelta(minutes=CODE_TTL_MIN)).strftime("%Y-%m-%d %H:%M:%S"), now.strftime("%Y-%m-%d %H:%M:%S")), returning=False)
+    return code
 
 STATUSES = ["Pending", "In Progress", "Completed"]
 PRIORITIES = ["Low", "Medium", "High", "Critical"]
@@ -59,12 +95,48 @@ def get_task(tid):
 def login():
     if request.method == "POST":
         ident = request.form.get("username", "").strip().lower()
-        u = db.query("SELECT * FROM users WHERE username=? OR email=?", (ident, ident), one=True)
-        if u and u["active"] and check_password_hash(u["password_hash"], request.form.get("password", "")):
-            session.clear(); session["uid"] = u["id"]
-            return redirect(url_for("dashboard"))
-        flash("Invalid username or password.", "error")
+        u = db.query("SELECT * FROM users WHERE (username=? OR email=?) AND active=1", (ident, ident), one=True)
+        if u and check_password_hash(u["password_hash"], request.form.get("password", "")):
+            if not u["email"]:
+                flash("Your account has no email on file. Ask your manager to add one in People before you can sign in.", "error")
+                return render_template("login.html")
+            code = issue_code(u["id"])
+            sent = send_code_email(u["email"], u["name"], code)
+            session.clear(); session["pending_uid"] = u["id"]
+            flash(f"We emailed a 6-digit code to {u['email']}." if sent else
+                  f"Email isn't set up on this server yet, so here is your code: {code}", "" if sent else "warn")
+            return redirect(url_for("verify"))
+        flash("Invalid username/email or password.", "error")
     return render_template("login.html")
+
+@app.route("/verify", methods=["GET", "POST"])
+def verify():
+    uid = session.get("pending_uid")
+    if not uid: return redirect(url_for("login"))
+    u = db.query("SELECT * FROM users WHERE id=? AND active=1", (uid,), one=True)
+    if not u: session.clear(); return redirect(url_for("login"))
+    if request.method == "POST":
+        if request.form.get("resend"):
+            row = db.query("SELECT sent_at FROM login_codes WHERE user_id=?", (uid,), one=True)
+            if row and (datetime.now() - datetime.strptime(row["sent_at"], "%Y-%m-%d %H:%M:%S")).total_seconds() < RESEND_COOLDOWN_SEC:
+                flash("Please wait a few seconds before requesting another code.", "error")
+            else:
+                sent = send_code_email(u["email"], u["name"], issue_code(uid))
+                flash(f"New code emailed to {u['email']}." if sent else f"Email isn't set up, so here is your new code: {issue_code(uid)}", "" if sent else "warn")
+            return redirect(url_for("verify"))
+        row = db.query("SELECT * FROM login_codes WHERE user_id=?", (uid,), one=True)
+        if not row or datetime.now() > datetime.strptime(row["expires_at"], "%Y-%m-%d %H:%M:%S"):
+            flash("That code expired. Request a new one below.", "error")
+        elif row["attempts"] >= MAX_ATTEMPTS:
+            flash("Too many wrong attempts. Request a new code below.", "error")
+        elif request.form.get("code", "").strip() == row["code"]:
+            db.execute("DELETE FROM login_codes WHERE user_id=?", (uid,))
+            session.clear(); session["uid"] = uid
+            return redirect(url_for("dashboard"))
+        else:
+            db.execute("UPDATE login_codes SET attempts=attempts+1 WHERE user_id=?", (uid,))
+            flash("That code isn't right. Try again.", "error")
+    return render_template("verify.html", email=u["email"])
 
 @app.route("/logout")
 def logout():
@@ -205,6 +277,29 @@ def activity():
     rows = db.query("""SELECT a.*, u.name, t.title FROM activity a LEFT JOIN users u ON u.id=a.user_id
         LEFT JOIN tasks t ON t.id=a.task_id ORDER BY a.id DESC LIMIT 100""")
     return render_template("activity.html", rows=rows)
+
+@app.route("/profile", methods=["GET", "POST"])
+@login_required
+def profile():
+    form = None
+    if request.method == "POST":
+        v = {k: request.form.get(k, "").strip() for k in ("name", "email", "current_password", "new_password")}
+        v["email"] = v["email"].lower()
+        dup = db.query("SELECT id FROM users WHERE email=? AND id!=?", (v["email"], g.user["id"]), one=True)
+        if not v["name"] or "@" not in v["email"]:
+            flash("Name and a valid email are required.", "error"); form = v
+        elif dup:
+            flash("That email is already used by another account.", "error"); form = v
+        elif v["new_password"] and not check_password_hash(g.user["password_hash"], v["current_password"]):
+            flash("Your current password is incorrect.", "error"); form = v
+        elif v["new_password"] and len(v["new_password"]) < 6:
+            flash("New password must be at least 6 characters.", "error"); form = v
+        else:
+            db.execute("UPDATE users SET name=?, email=? WHERE id=?", (v["name"], v["email"], g.user["id"]))
+            if v["new_password"]: db.execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(v["new_password"]), g.user["id"]))
+            flash("Profile updated." + (" Password changed." if v["new_password"] else ""))
+            return redirect(url_for("profile"))
+    return render_template("profile.html", form=form)
 
 @app.route("/employees")
 @manager_required

@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block title %}My profile{% endblock %}{% block body %}
+{% set f = form or g.user %}<h1>My profile</h1><p class="muted">{{ g.user.role|capitalize }} · {{ g.user.department or '-' }}</p>
+<form class="panel form" method="post"><label>Full name<input name="name" value="{{ f.name }}" required></label>
+<label>Email (used to sign in and to receive your code)<input name="email" type="email" value="{{ f.email }}" required></label>
+<hr style="border:none;border-top:1px solid var(--line);width:100%">
+<h2>Change password</h2><label>Current password<input name="current_password" type="password" autocomplete="current-password"></label>
+<label>New password (leave blank to keep it)<input name="new_password" type="password" minlength="6" autocomplete="new-password"></label>
+<button>Save changes</button></form>{% endblock %}
